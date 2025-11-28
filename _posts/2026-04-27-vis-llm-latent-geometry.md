@@ -51,7 +51,7 @@ toc:
 
 Despite enormous advances made in the field of machine learning (ML) research, understanding a model's internal decision-making processes remains a difficult challenge. Model interpretability is central to areas such as alignment and explainable AI, and the field is burgeoning with an influx of work. However, many foundational questions are still unresolved. Against this backdrop, mechanistic interpretability has emerged as a field that aims to achieve a granular, causal understanding of neural networks, particularly large language models (LLMs), by reverse engineering their internal components. One promising avenue for understanding LLMs is analyzing their representations. Feature geometry, the structure and organization of representations within high-dimensional latent space, offers a way to study how abstract features are encoded and transformed across model layers. By examining geometric relationships between latent states, such as directions, clusters, and manifolds, researchers can gain insight into how LLMs generalize, reason, and abstract.
 
-In this work, we analyze the feature geometry of LLMs by capturing latent states across multiple components and projecting them into interpretable low-dimensional spaces using PCA and UMAP. This approach allows visualizations of how representations evolve through the Transformer model. Throughout this work, we aim to provide a strong background and exposition for better accessibility. To ensure clarity, a glossary of key technical terms used throughout this paper is provided in the Glossary section.
+In this work, we analyze the feature geometry of LLMs by capturing latent states across multiple components and projecting them into interpretable low-dimensional spaces using PCA and UMAP. This approach allows visualizations of how representations evolve through the Transformer model. Throughout this work, we aim to provide a strong background and exposition for better accessibility. To ensure clarity, a glossary of key technical terms used throughout this paper is provided in the [Glossary](#glossary) section.
 
 ## Background
 
@@ -62,7 +62,7 @@ In this work, we analyze the feature geometry of LLMs by capturing latent states
     The two equivalent perspectives on the Transformer architecture
 </div>
 
-Originally introduced by Vaswani et al. in 2017 <d-cite key="vaswani2023attentionneed"></d-cite>, Transformers have achieved great notoriety for their state-of-the-art performance across most language modeling tasks. Despite this success, their internal mechanisms remain difficult to understand, motivating extensive work in mechanistic interpretability (see Introduction section). Since our experiments focus on analyzing decoder-only Transformers (e.g., GPT-2<d-cite key="radford2019language"></d-cite> and LLaMa<d-cite key="touvron2023llamaopenefficientfoundation"></d-cite>), we begin by providing a brief overview of the Transformer architecture. To ensure clarity amongst various terminologies in recent literature, we also establish a consistent set of terms that will be used throughout this paper. That is, we formalize a decoder-only Transformer as a sequence of **blocks**, each consisting of four primary **components/layers**: the normalization layer (e.g., layer norm or RMSNorm) preceding the attention component, the multi-head self-attention, the normalization layer preceding the MLP, and the MLP (multilayer perceptron). Although the original Transformer architecture utilized a post-norm design, where the normalization layer came after the attention or MLP component, most modern architectures (GPT-2 and LLaMa) adopt a pre-norm design. Thus, we depict the pre-norm architecture in the figures above and below. We use the term "final norm" to refer to the normalization applied after the last Transformer block. This is immediately followed by the unembedding layer, which maps the final latent representation into vocabulary logits for token prediction. Finally, we use 0-based indexing when referring to blocks, layers, and sequence positions throughout the paper. For example, "block 0" denotes the _first_ block in the Transformer, and "sequence position 0" denotes the _first_ token position in a sequence. In order to avoid ambiguity between "first" and index "1", we will refer to the "first" ($0$-th) item as the "initial" item. While Transformers are often conceptualized as a sequential operation through each of their components with residual connections between layers, we adopt the mathematically equivalent perspective that these skip connections collectively form the central communication channel through which all components interact. We refer to this pathway as the residual stream <d-cite key="elhage2021mathematical"></d-cite>.
+Originally introduced by Vaswani et al. in 2017 <d-cite key="vaswani2023attentionneed"></d-cite>, Transformers have achieved great notoriety for their state-of-the-art performance across most language modeling tasks. Despite this success, their internal mechanisms remain difficult to understand, motivating extensive work in mechanistic interpretability (see [Introduction](#introduction) section). Since our experiments focus on analyzing decoder-only Transformers (e.g., GPT-2<d-cite key="radford2019language"></d-cite> and LLaMa<d-cite key="touvron2023llamaopenefficientfoundation"></d-cite>), we begin by providing a brief overview of the Transformer architecture. To ensure clarity amongst various terminologies in recent literature, we also establish a consistent set of terms that will be used throughout this paper. That is, we formalize a decoder-only Transformer as a sequence of **blocks**, each consisting of four primary **components/layers**: the normalization layer (e.g., layer norm or RMSNorm) preceding the attention component, the multi-head self-attention, the normalization layer preceding the MLP, and the MLP (multilayer perceptron). Although the original Transformer architecture utilized a post-norm design, where the normalization layer came after the attention or MLP component, most modern architectures (GPT-2 and LLaMa) adopt a pre-norm design. Thus, we depict the pre-norm architecture in the figures above and below. We use the term "final norm" to refer to the normalization applied after the last Transformer block. This is immediately followed by the unembedding layer, which maps the final latent representation into vocabulary logits for token prediction. Finally, we use 0-based indexing when referring to blocks, layers, and sequence positions throughout the paper. For example, "block 0" denotes the _first_ block in the Transformer, and "sequence position 0" denotes the _first_ token position in a sequence. In order to avoid ambiguity between "first" and index "1", we will refer to the "first" ($0$-th) item as the "initial" item. While Transformers are often conceptualized as a sequential operation through each of their components with residual connections between layers, we adopt the mathematically equivalent perspective that these skip connections collectively form the central communication channel through which all components interact. We refer to this pathway as the residual stream <d-cite key="elhage2021mathematical"></d-cite>.
 
 The figure above illustrates these differing perspectives. In this residual stream-centric view, all components of a Transformer (the token embedding, attention heads, MLP layers, and unembedding layer) communicate with each other by reading and writing to different subspaces of the residual stream. Rather than thinking of information flowing sequentially through layers, we conceptualize each layer as reading its input from the residual stream (by performing a linear projection), and then writing its result to the residual stream by adding a linear projection back in <d-cite key="elhage2021mathematical"></d-cite>. This additive structure preserves a path for an identity pathway to flow through the model and into each component, unobstructed by any operation other than the direct sum of component updates back into the residual stream. We highlight the importance of the residual stream perspective for two reasons. Firstly, it allows us to treat all components of the Transformer as operating within a shared representational space, intuitively describing the collaborative nature of component interactions. This shared space enables different components to develop a collective understanding of features and their corresponding directions, making it possible to interpret representational changes as coordinated rather than isolated transformations. Secondly, this framing provides a conceptual basis for analyzing how the geometry of these shared representations evolves throughout the residual stream, thereby offering insights into how components jointly shape the model's feature space.
 
@@ -88,7 +88,7 @@ In many early Transformer architectures, such as GPT-2 (used in our experiments)
 
 On the other hand, the LLaMa model we use employs a specific form of functional positional encoding called Rotary Positional Encodings (RoPE).  Rather than adding fixed position vectors, RoPE applies a position-dependent rotation to query and key vectors within each attention head. This rotation encodes relative position information directly into the attention mechanism, allowing the model to generalize more effectively to longer sequences. Conceptually, RoPE embeds position in the geometry of relationships between tokens, rather than as an explicit positional vector.
 
-This distinction serves as the key motivation behind _Effects of Sequence Position_ experiments in the Effects of Sequence Position section and _Repeating Token Experiments_ in the Repeating Token Experiment section.
+This distinction serves as the key motivation behind _Effects of Sequence Position_ experiments in the [Effects of Sequence Position](#effects-of-sequence-position) section and _Repeating Token Experiments_ in the [Repeating Token Experiment](#repeating-token-experiment) section.
 
 ## Methodology
 
@@ -106,7 +106,7 @@ The visualizations obtained from our dimensionality reduction experiments are th
     The six capture points within each Transformer block. Points 1 and 4 correspond to the outputs of the normalization layers (pre-attention and pre-MLP). Points 2 and 5 correspond to the outputs of the attention and MLP modules, respectively. Points 3 and 6 capture the residual stream after the attention and MLP additions.
 </div>
 
-The generation pipeline automates three stages: (1) generating inputs, (2) capturing latent states, and (3) saving labeled latent states for downstream processing and visualization. This design provides a reproducible and extensible foundation for our experiments (see Results and Discussion section). 
+The generation pipeline automates three stages: (1) generating inputs, (2) capturing latent states, and (3) saving labeled latent states for downstream processing and visualization. This design provides a reproducible and extensible foundation for our experiments (see [Results and Discussion](#results-and-discussion) section). 
 
 The pipeline supports two modes of operation. In the default "text" mode, text passages are sampled from a text dataset. For our experiments, we ran the model through the well-known Project Gutenberg (PG-19) dataset <d-cite key="rae2019compressivetransformerslongrangesequence"></d-cite>, consisting of a corpus of books written before 1919. Each passage is tokenized and truncated or padded to a fixed sequence length, ensuring uniformity across samples. In "singular" mode, by contrast, the pipeline probes individual tokens directly by iterating over the model's vocabulary. This allows for fine-grained analysis of token-level representations without contextual interference. Both modes are parameterized by the number of samples and the desired sequence length (set at $$ 1 $$ for the singular mode).
 
@@ -136,7 +136,7 @@ We used GPT-2 Large ($$ 774 $$M) and LLaMa-7B to generate the latent states. On 
 - GPT-2: $$ 128 $$ samples, each $$ 1024 $$ tokens long
 - LLaMa: $$ 64 $$ samples, each $$ 2048 $$ tokens long
 
-We note that we use the maximum input length possible for both models. LLaMa is trained with a `<BOS>` (beginning of sentence) token prepended to all inputs. As a result, we prepend the `<BOS>` token to the beginning of all PG-19 inputs to LLaMa. After collecting the LLaMa latent states, we reduced the dimensionality of the latent states from $$ 4096 $$ to $$ 512 $$ using PCA. These dimensionality-reduced latent states were subsequently used in all visualizations except those in the Repeating Token Experiment section. They were not used in any analyses of latent state norms; those used the original full dimensionality latent states for accurate results. All GPT-2 latent states were used in their full dimensionality.
+We note that we use the maximum input length possible for both models. LLaMa is trained with a `<BOS>` (beginning of sentence) token prepended to all inputs. As a result, we prepend the `<BOS>` token to the beginning of all PG-19 inputs to LLaMa. After collecting the LLaMa latent states, we reduced the dimensionality of the latent states from $$ 4096 $$ to $$ 512 $$ using PCA. These dimensionality-reduced latent states were subsequently used in all visualizations except those in the [Repeating Token Experiment](#repeating-token-experiment) section. They were not used in any analyses of latent state norms; those used the original full dimensionality latent states for accurate results. All GPT-2 latent states were used in their full dimensionality.
 
 Existing research demonstrates how different blocks in a Transformer have different roles. While earlier blocks focus on converting tokens into concepts<d-cite key="nanda2023factfinding"></d-cite> and the final blocks heavily denoise and refine the output, intermediate (middle) blocks, which are more robust to swapping and deletion, gradually create and refine intermediate features in a shared representation space<d-cite key="sun2025transformerlayerspainters,lad2025remarkablerobustnessllmsstages"></d-cite>. For some of our experiments, we are interested in investigating the behavior of the intermediate block latent states without interference from earlier or later blocks. As a result, we define here the specific "intermediate" blocks/layers which we will later refer to in our results and discussions for both our tested models. Because there does not exist a clear methodology to define concrete boundaries for the "intermediate" blocks, the definitions we make are somewhat arbitrary. Nevertheless, it is important for us to have consistent definitions across our analyses. For GPT-2, we define these as the layers in blocks $$ 2 $$-$$ 8 $$ (from a range of $$ 0 $$-$$ 11 $$), while for LLaMa, they are the layers in blocks $$ 6 $$-$$ 27 $$ (from a range of $$ 0 $$-$$ 31 $$).
 
@@ -179,7 +179,7 @@ The figure above shows the average norm of each layer of both GPT-2 and LLaMa ac
     PCA visualizations of GPT-2 and LLaMa latent states on the PG-19 dataset. Latent states were converted to unit vectors before any PCA was performed. PCA was fit to all latent states, but was used to transform latent states only after they were averaged across samples/sequence dimensions. The initial token latent states were excluded. (a) Visualization after averaging across the sample dimension. (b) Visualization after averaging across the sequence dimension.
 </div>
 
-The figure above visualizes, using PCA, the layers of both GPT-2 and LLaMa in latent space. All latent states were converted to unit vectors before any dimensionality reduction or visualization was performed. Otherwise, the higher norms of the later layers tend to overpower all other variability, resulting in an uninteresting visualization. Additionally, while PCA was fit on the full latent state data, it was used to transform the data only after either averaging the latent states over the sequence or sample dimensions in order to reduce visual clutter (otherwise, there can be so many data points that the visualization is not intelligible). Averaging the latent states over the sample dimension removes the variability between samples, leaving the only sources of variability in the latent states being the differences between sequence positions and the differences between layers of the model. In contrast, averaging over the sequence dimension removes any variability/structure associated with the sequence position, thus only leaving the random variability between samples and the differences between layers. As can be seen in the figure above, a clear layer-wise progression of latent states is visible in both GPT-2 and LLaMa cases. In the GPT-2 case, the "wavy" structure of the positional embeddings is clearly visible in each layer of the sample mean (a) case, while in LLaMa, which uses RoPE, a pattern is less clear. The patterns of sequence position are further analyzed in the Effects of Sequence Position section.
+The figure above visualizes, using PCA, the layers of both GPT-2 and LLaMa in latent space. All latent states were converted to unit vectors before any dimensionality reduction or visualization was performed. Otherwise, the higher norms of the later layers tend to overpower all other variability, resulting in an uninteresting visualization. Additionally, while PCA was fit on the full latent state data, it was used to transform the data only after either averaging the latent states over the sequence or sample dimensions in order to reduce visual clutter (otherwise, there can be so many data points that the visualization is not intelligible). Averaging the latent states over the sample dimension removes the variability between samples, leaving the only sources of variability in the latent states being the differences between sequence positions and the differences between layers of the model. In contrast, averaging over the sequence dimension removes any variability/structure associated with the sequence position, thus only leaving the random variability between samples and the differences between layers. As can be seen in the figure above, a clear layer-wise progression of latent states is visible in both GPT-2 and LLaMa cases. In the GPT-2 case, the "wavy" structure of the positional embeddings is clearly visible in each layer of the sample mean (a) case, while in LLaMa, which uses RoPE, a pattern is less clear. The patterns of sequence position are further analyzed in the [Effects of Sequence Position](#effects-of-sequence-position) section.
 
 ### Attention vs. MLP Signature
 
@@ -201,7 +201,7 @@ The second figure above utilized 2D UMAP dimensionality reduction on the latent 
 
 ### Effects of Sequence Position
 
-We visualize the geometric effects of sequence position on post-add latent states from intermediate blocks of both GPT-2 and LLaMa. PCA was used for dimensionality reduction instead of UMAP, as UMAP does not meaningfully preserve geometric shapes in Euclidean space. We use intermediate layer latent states from PG-19. Latent states were averaged over both samples and layers before dimensionality reduction. This was to eliminate sources of variability between samples or layers, leaving only the structure between sequence positions. Latent states were also converted to unit vectors before dimensionality reduction. This was done for two reasons. First, we found the visualizations looked either nearly identical (GPT-2) or slightly clearer (LLaMa) when latent states were converted to unit vectors. Second, the use of unit vectors allowed us to include the initial token latent state without being concerned that its extreme norm would obscure all other patterns. We provide visualizations that omit the initial token and do not convert latent states to unit vectors as a comparison in the Appendix section. For all visualizations, we perform PCA which reduces the latent states to $$ 6 $$ dimensions and then visualize the $$ 15 $$ unique pairs of those $$ 6 $$ dimensions.
+We visualize the geometric effects of sequence position on post-add latent states from intermediate blocks of both GPT-2 and LLaMa. PCA was used for dimensionality reduction instead of UMAP, as UMAP does not meaningfully preserve geometric shapes in Euclidean space. We use intermediate layer latent states from PG-19. Latent states were averaged over both samples and layers before dimensionality reduction. This was to eliminate sources of variability between samples or layers, leaving only the structure between sequence positions. Latent states were also converted to unit vectors before dimensionality reduction. This was done for two reasons. First, we found the visualizations looked either nearly identical (GPT-2) or slightly clearer (LLaMa) when latent states were converted to unit vectors. Second, the use of unit vectors allowed us to include the initial token latent state without being concerned that its extreme norm would obscure all other patterns. We provide visualizations that omit the initial token and do not convert latent states to unit vectors as a comparison in the [Appendix](#appendix) section. For all visualizations, we perform PCA which reduces the latent states to $$ 6 $$ dimensions and then visualize the $$ 15 $$ unique pairs of those $$ 6 $$ dimensions.
 
 #### GPT-2 Positional Embeddings
 
@@ -251,7 +251,7 @@ The figure above shows a visualization after PCA of the repeating token latent s
 
 ## Conclusion
 
-We present a study into visualizing the internal representations of Transformer-based language models. Through systematic analysis of GPT-2 and LLaMa, we demonstrate how dimensionality reduction techniques can reveal geometric patterns that show how these models organize and process information. Our experiments highlight several notable phenomena. Most significantly, we identify a persistent geometric separation between attention and MLP component outputs (see Attention vs. MLP Signature section), a pattern that appears consistent across different model architectures and has not been previously documented to our knowledge. We also noted the high norm of latent states at the initial sequence position (see Large Norm section), a phenomenon that extends beyond special tokens like <BOS> to many vocabulary tokens in LLaMa despite its use of relative position encodings. Additionally, we visualized the layerwise evolution of latent states (see Layerwise Visualizations section), the geometric effects of sequence position (see Effects of Sequence Position section), and experimented with repeated token sequences (see Repeating Token Experiment section). Ultimately, we add to the growing body of interpretability research by motivating further work into analyzing feature geometry. Future work can help further our understanding of the dynamics of latent states within Transformer models across layers, models, and experimental conditions. By deepening our understanding of how these geometric structures emerge and behave, we move closer to principled, reliable interpretability methods capable of guiding the development of more transparent and understandable models.
+We present a study into visualizing the internal representations of Transformer-based language models. Through systematic analysis of GPT-2 and LLaMa, we demonstrate how dimensionality reduction techniques can reveal geometric patterns that show how these models organize and process information. Our experiments highlight several notable phenomena. Most significantly, we identify a persistent geometric separation between attention and MLP component outputs (see [Attention vs. MLP Signature](#attention-vs-mlp-signature) section), a pattern that appears consistent across different model architectures and has not been previously documented to our knowledge. We also noted the high norm of latent states at the initial sequence position (see [Large Norm of 0-th Sequence Position Latent States](#large-norm-of-0-th-sequence-position-latent-states) section), a phenomenon that extends beyond special tokens like <BOS> to many vocabulary tokens in LLaMa despite its use of relative position encodings. Additionally, we visualized the layerwise evolution of latent states (see [Layerwise Visualizations](#layerwise-visualizations) section), the geometric effects of sequence position (see [Effects of Sequence Position](#effects-of-sequence-position) section), and experimented with repeated token sequences (see [Repeating Token Experiment](#repeating-token-experiment) section). Ultimately, we add to the growing body of interpretability research by motivating further work into analyzing feature geometry. Future work can help further our understanding of the dynamics of latent states within Transformer models across layers, models, and experimental conditions. By deepening our understanding of how these geometric structures emerge and behave, we move closer to principled, reliable interpretability methods capable of guiding the development of more transparent and understandable models.
 
 ## Acknowledgments
 
@@ -259,55 +259,80 @@ We thank the University of Virginia Research Computing and the Department of Com
 
 ## Glossary
 
-**0-Based Indexing** — A convention where counting begins at zero, used for numbering Transformer blocks and sequence positions (e.g., "block 0" or "sequence position 0").
+**0-Based Indexing** — A convention where counting begins at zero, used for numbering Transformer blocks and sequence positions (e.g., "block 0" or "sequence position 0").  
+_[Transformers](#transformers) section_
 
-**Attention Component** — A Transformer component that computes relationships and transmits information between tokens via self-attention, enabling context-dependent representations.
+**Attention Component** — A Transformer component that computes relationships and transmits information between tokens via self-attention, enabling context-dependent representations.  
+_[Transformers](#transformers) section_
 
-**Feature Geometry** — The structure and organization of learned representations within high-dimensional latent space, often analyzed through dimensionality reduction.
+**Feature Geometry** — The structure and organization of learned representations within high-dimensional latent space, often analyzed through dimensionality reduction.  
+_[Introduction](#introduction) section_
 
-**Initial Token** — The first token in a sequence (position 0).
+**Initial Token** — The first token in a sequence (position 0).  
+_[Large Norm of 0-th Sequence Position Latent States](#large-norm-of-0-th-sequence-position-latent-states) section_
 
-**Intermediate Layers/Blocks** — The middle portion of a Transformer, as defined in the Experimental Setup section.
+**Intermediate Layers/Blocks** — The middle portion of a Transformer, as defined in the [Experimental Setup](#experimental-setup) section.  
+_[Experimental Setup](#experimental-setup) section_
 
-**Layer Dimension** — The dimension of our generated dataset indexing Transformer's latent captures along the model's depth.
+**Layer Dimension** — The dimension of our generated dataset indexing Transformer's latent captures along the model's depth.  
+_[Pipeline](#pipeline) section_
 
-**Layers / Components** — The key submodules within each Transformer block: _normalization layers_, _attention_, and _MLP_.
+**Layers / Components** — The key submodules within each Transformer block: _normalization layers_, _attention_, and _MLP_.  
+_[Transformers](#transformers) section_
 
-**Latent Space** — The high-dimensional vector space in which latent states reside.
+**Latent Space** — The high-dimensional vector space in which latent states reside.  
+_[Transformers](#transformers) section_
 
-**Learned Positional Encoding** — A method of generating positional embeddings by learning weights.
+**Learned Positional Encoding** — A method of generating positional embeddings by learning weights.  
+_[Positional Embeddings/Encodings](#positional-embeddingsencodings) section_
 
-**Linear Representation Hypothesis (LRH)** — The hypothesis that high-level features in language models correspond to approximately linear directions in representation space.
+**Linear Representation Hypothesis (LRH)** — The hypothesis that high-level features in language models correspond to approximately linear directions in representation space.  
+_[Linear Representation Hypothesis](#linear-representation-hypothesis) section_
 
-**MLP (Multilayer Perceptron)** — The feed-forward component of a Transformer block.
+**MLP (Multilayer Perceptron)** — The feed-forward component of a Transformer block.  
+_[Transformers](#transformers) section_
 
-**Norm** — The L2 norm (Euclidean length/magnitude) of a latent vector.
+**Norm** — The L2 norm (Euclidean length/magnitude) of a latent vector.  
+_[Large Norm of 0-th Sequence Position Latent States](#large-norm-of-0-th-sequence-position-latent-states) section_
 
-**Normalization Layer** — A component (e.g., LayerNorm, RMSNorm) that stabilizes activations by rescaling and centering inputs; may appear before or after components in pre-norm or post-norm designs.
+**Normalization Layer** — A component (e.g., LayerNorm, RMSNorm) that stabilizes activations by rescaling and centering inputs; may appear before or after components in pre-norm or post-norm designs.  
+_[Transformers](#transformers) section_
 
-**PCA (Principal Component Analysis)** — A linear dimensionality reduction technique.
+**PCA (Principal Component Analysis)** — A linear dimensionality reduction technique.  
+_[Dimensionality Reduction](#dimensionality-reduction) section_
 
-**Positional Embedding** — A positionally aware representation of token embeddings that encode absolute token order within the sequence.
+**Positional Embedding** — A positionally aware representation of token embeddings that encode absolute token order within the sequence.  
+_[Positional Embeddings/Encodings](#positional-embeddingsencodings) section_
 
-**Post-Add Latent States** — Latent states captured after an attention or MLP output has been added back into the residual stream, reflecting updated representations.
+**Post-Add Latent States** — Latent states captured after an attention or MLP output has been added back into the residual stream, reflecting updated representations.  
+_[Transformers](#transformers) section_
 
-**Pre-Add Latent States** — Output of an attention or MLP component before it is added back into the residual stream.
+**Pre-Add Latent States** — Output of an attention or MLP component before it is added back into the residual stream.  
+_[Transformers](#transformers) section_
 
-**Residual Stream** — The central communication channel formed by skip connections in the Transformer.
+**Residual Stream** — The central communication channel formed by skip connections in the Transformer.  
+_[Transformers](#transformers) section_
 
-**RoPE (Rotary Positional Encoding)** — A method for generating _positional embeddings_ by injecting position information through rotating attention query and key vectors in the attention mechanism according to token index.
+**RoPE (Rotary Positional Encoding)** — A method for generating _positional embeddings_ by injecting position information through rotating attention query and key vectors in the attention mechanism according to token index.  
+_[Positional Embeddings/Encodings](#positional-embeddingsencodings) section_
 
-**Samples** — Individual text inputs or tokenized passages passed through the model as batches to produce latent states for analysis.
+**Samples** — Individual text inputs or tokenized passages passed through the model as batches to produce latent states for analysis.  
+_[Pipeline](#pipeline) section_
 
-**Sample Dimension** — The dimension of our generated latent state dataset indexing latent states generated from different input samples.
+**Sample Dimension** — The dimension of our generated latent state dataset indexing latent states generated from different input samples.  
+_[Pipeline](#pipeline) section_
 
-**Sequence Dimension** — The dimension of our generated latent state dataset indexing token positions within a sequence.
+**Sequence Dimension** — The dimension of our generated latent state dataset indexing token positions within a sequence.  
+_[Pipeline](#pipeline) section_
 
-**Skip Connections** — Pathways that add each block's input back to its output, enabling a shared representation space across layers.
+**Skip Connections** — Pathways that add each block's input back to its output, enabling a shared representation space across layers.  
+_[Transformers](#transformers) section_
 
-**Unembedding Layer** — The final linear layer that projects the model's last hidden state back into the vocabulary space.
+**Unembedding Layer** — The final linear layer that projects the model's last hidden state back into the vocabulary space.  
+_[Transformers](#transformers) section_
 
-**UMAP (Uniform Manifold Approximation and Projection)** — A nonlinear dimensionality reduction technique.
+**UMAP (Uniform Manifold Approximation and Projection)** — A nonlinear dimensionality reduction technique.  
+_[Dimensionality Reduction](#dimensionality-reduction) section_
 
 ## Appendix
 
