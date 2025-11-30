@@ -37,7 +37,6 @@ toc:
       - name: Layerwise Visualizations
       - name: Attention vs. MLP Signature
       - name: Effects of Sequence Position
-      - name: Repeating Token Experiment
   - name: Conclusion
 #   - name: Acknowledgments
   - name: Glossary
@@ -88,7 +87,7 @@ In many early Transformer architectures, such as GPT-2 (used in our experiments)
 
 On the other hand, the LLaMa model we use employs a specific form of functional positional encoding called Rotary Positional Encodings (RoPE).  Rather than adding fixed position vectors, RoPE applies a position-dependent rotation to query and key vectors within each attention head. This rotation encodes relative position information directly into the attention mechanism, allowing the model to generalize more effectively to longer sequences. Conceptually, RoPE embeds position in the geometry of relationships between tokens, rather than as an explicit positional vector.
 
-This distinction serves as the key motivation behind _Effects of Sequence Position_ experiments in the [Effects of Sequence Position](#effects-of-sequence-position) section and _Repeating Token Experiments_ in the [Repeating Token Experiment](#repeating-token-experiment) section.
+This distinction serves as the key motivation behind _Effects of Sequence Position_ experiments in the [Effects of Sequence Position](#effects-of-sequence-position) section.
 
 ## Methodology
 
@@ -136,7 +135,7 @@ We used GPT-2 Large (774M) and LLaMa-7B to generate the latent states. On all re
 - GPT-2: 128 samples, each 1024 tokens long
 - LLaMa: 64 samples, each 2048 tokens long
 
-We note that we use the maximum input length possible for both models. LLaMa is trained with a `<BOS>` (beginning of sentence) token prepended to all inputs. As a result, we prepend the `<BOS>` token to the beginning of all PG-19 inputs to LLaMa. After collecting the LLaMa latent states, we reduced the dimensionality of the latent states from 4096 to 512 using PCA. These dimensionality-reduced latent states were subsequently used in all visualizations except those in the [Repeating Token Experiment](#repeating-token-experiment) section. They were not used in any analyses of latent state norms; those used the original full dimensionality latent states for accurate results. All GPT-2 latent states were used in their full dimensionality.
+We note that we use the maximum input length possible for both models. LLaMa is trained with a `<BOS>` (beginning of sentence) token prepended to all inputs. As a result, we prepend the `<BOS>` token to the beginning of all PG-19 inputs to LLaMa. After collecting the LLaMa latent states, we reduced the dimensionality of the latent states from 4096 to 512 using PCA. These dimensionality-reduced latent states were subsequently used in all visualizations. They were not used in any analyses of latent state norms; those used the original full dimensionality latent states for accurate results. All GPT-2 latent states were used in their full dimensionality.
 
 Existing research demonstrates how different blocks in a Transformer have different roles. While earlier blocks focus on converting tokens into concepts as shown by Nanda et al. in 2023 <d-cite key="nanda2023factfinding"></d-cite> and the final blocks heavily denoise and refine the output, intermediate (middle) blocks, which are more robust to swapping and deletion, gradually create and refine intermediate features in a shared representation space as demonstrated by Sun et al. in 2025 and Lad et al. in 2025 <d-cite key="sun2025transformerlayerspainters,lad2025remarkablerobustnessllmsstages"></d-cite>. For some of our experiments, we are interested in investigating the behavior of the intermediate block latent states without interference from earlier or later blocks. As a result, we define here the specific "intermediate" blocks/layers which we will later refer to in our results and discussions for both our tested models. Because there does not exist a clear methodology to define concrete boundaries for the "intermediate" blocks, the definitions we make are somewhat arbitrary. Nevertheless, it is important for us to have consistent definitions across our analyses. For GPT-2, we define these as the layers in blocks 2-8 (from a range of 0-11), while for LLaMa, they are the layers in blocks 6-27 (from a range of 0-31).
 
@@ -223,35 +222,9 @@ In the figure above, we see a clear geometric pattern formed between sequence po
 
 Due to the inherent nature of RoPE applying only _within_ self-attention heads, it is not straightforward to fully separate the effects of the RoPE-augmented attention heads on latent states from other factors such as the content of the input tokens themselves. This is unlike how it is possible to separate the learned positional embeddings of GPT-2 from any other context by simply analyzing the learned positional embeddings themselves. As such, it is not possible to determine via these visualizations alone whether the geometric patterns observed in the figure above are a result of RoPE, the relative convergence of features within contributions from self-attention heads as the number of previous tokens increases, or both. We leave interpreting the sequence-wise latent state geometric patterns of RoPE models to future research.
 
-### Repeating Token Experiment
-
-We hypothesize that, in the case of RoPE-based models, the latent states of the same token repeated many times should eventually "converge" in latent space; after all, the attention heads of the model should view 2000 previous tokens as little different from how it views 2001 previous tokens. We experiment with inputs to LLaMa which are simply a sequence of the same token repeated many times. We only run this experiment for LLaMa as the same logic does not necessarily hold in the case of the learned positional embeddings of GPT-2, which introduces an absolute signature for each sequence position, whereas RoPE only affects _relative_ distinctions between sequence positions.
-
-We choose to repeat the token corresponding to the character "e" for the following reasons:
-
-- It does not possess any particularly special syntactic function, unlike tokens such as "." or "\n" which often play a significant role in separating or demarcating sections of text with different contexts.
-- "e" is not commonly repeated in long sequences. At the same time, it _is_ occasionally repeated in text, such as in "weeeeeeeeeeeeeeeee". Thus, "e" serves as a good "neutral" token in the sense that a sequence of repeating "e" tokens is neither very common nor extremely perplexing.
-- "e" by itself does not carry as much semantic information as other tokens which are complete words or concepts might. Of course, "e" can represent a mathematical constant; however, usually this would only become apparent when "e" is paired with other tokens of mathematical context.
-
-We note that we tokenize the sequence of repeating "e" tokens with the `<BOS>` token as the initial token.
-
-{% include figure.liquid path="assets/img/2026-04-27-vis-llm-latent-geometry/FIG_Repeating_Token_e_Norms.png" class="img-fluid" %}
-<div class="caption">
-    Latent state norm for each sequence position. The latent state norms were averaged across the intermediate layers.
-</div>
-
-The figure above shows the average latent state norm across the intermediate layers for each sequence position. After the initial spike of the initial `<BOS>` token, the norm of the repeating token latent states stays relatively low for ~100 tokens from gradually climbing to a large norm similar to that of the initial token latent states.
-
-{% include figure.liquid path="assets/img/2026-04-27-vis-llm-latent-geometry/FIG_LLaMa_repeating_e.png" class="img-fluid" %}
-<div class="caption">
-    PCA of the repeating token latent states showing a convergence pattern. The latent states used were from the intermediate layers, and the latent states were averaged across the layers before dimensionality reduction or visualization.
-</div>
-
-The figure above shows a visualization after PCA of the repeating token latent states. As expected, a clear convergence pattern can be seen from the earlier to the later tokens. Notably, the initial (0-th) token is much closer to the final tokens than to the 1-st token. This is even true in the unit vector case, where only direction matters, and indicates that the later repeating "e" token latent states with high norm point in a similar direction to the initial `<BOS>` token. This is consistent with the findings of Sun et al. <d-cite key="sun2024massiveactivationslargelanguage"></d-cite>, which found that "massive activations" (what we refer to as the latent states with huge norms) tend to be constant (all point in a similar direction).
-
 ## Conclusion
 
-We present a study into visualizing the internal representations of Transformer-based language models. Through systematic analysis of GPT-2 and LLaMa, we demonstrate how dimensionality reduction techniques can reveal geometric patterns that show how these models organize and process information. Our experiments highlight several notable phenomena. Most significantly, we identify a persistent geometric separation between attention and MLP component outputs (see [Attention vs. MLP Signature](#attention-vs-mlp-signature) section), a pattern that appears consistent across different model architectures and has not been previously documented to our knowledge. We also noted the high norm of latent states at the initial sequence position (see [Large Norm of 0-th Sequence Position Latent States](#large-norm-of-0-th-sequence-position-latent-states) section), a phenomenon that extends beyond special tokens like `<BOS>` to many vocabulary tokens in LLaMa despite its use of relative position encodings. Additionally, we visualized the layerwise evolution of latent states (see [Layerwise Visualizations](#layerwise-visualizations) section), the geometric effects of sequence position (see [Effects of Sequence Position](#effects-of-sequence-position) section), and experimented with repeated token sequences (see [Repeating Token Experiment](#repeating-token-experiment) section). Ultimately, we add to the growing body of interpretability research by motivating further work into analyzing feature geometry. Future work can help further our understanding of the dynamics of latent states within Transformer models across layers, models, and experimental conditions. By deepening our understanding of how these geometric structures emerge and behave, we move closer to principled, reliable interpretability methods capable of guiding the development of more transparent and understandable models.
+We present a study into visualizing the internal representations of Transformer-based language models. Through systematic analysis of GPT-2 and LLaMa, we demonstrate how dimensionality reduction techniques can reveal geometric patterns that show how these models organize and process information. Our experiments highlight several notable phenomena. Most significantly, we identify a persistent geometric separation between attention and MLP component outputs (see [Attention vs. MLP Signature](#attention-vs-mlp-signature) section), a pattern that appears consistent across different model architectures and has not been previously documented to our knowledge. We also noted the high norm of latent states at the initial sequence position (see [Large Norm of 0-th Sequence Position Latent States](#large-norm-of-0-th-sequence-position-latent-states) section), a phenomenon that extends beyond special tokens like `<BOS>` to many vocabulary tokens in LLaMa despite its use of relative position encodings. Additionally, we visualized the layerwise evolution of latent states (see [Layerwise Visualizations](#layerwise-visualizations) section) and the geometric effects of sequence position (see [Effects of Sequence Position](#effects-of-sequence-position) section). Ultimately, we add to the growing body of interpretability research by motivating further work into analyzing feature geometry. Future work can help further our understanding of the dynamics of latent states within Transformer models across layers, models, and experimental conditions. By deepening our understanding of how these geometric structures emerge and behave, we move closer to principled, reliable interpretability methods capable of guiding the development of more transparent and understandable models.
 
 
 
